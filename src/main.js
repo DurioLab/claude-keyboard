@@ -68,7 +68,8 @@ async function resizeWindow(size) {
       const scale = monitor.scaleFactor;
       const screenW = monitor.size.width / scale;
       const x = (screenW - size.width) / 2;
-      const y = 38;
+      const isMac = navigator.platform.startsWith('Mac');
+      const y = isMac ? 38 : 8;
       await appWindow.setSize(new window.__TAURI__.window.LogicalSize(size.width, size.height));
       await appWindow.setPosition(new window.__TAURI__.window.LogicalPosition(x, y));
     } else {

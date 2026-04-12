@@ -247,3 +247,10 @@ body {
   color: rgba(255, 255, 255, 0.2);
   letter-spacing: 0.3px;
 }
+
+/* Windows rounded corner fallback */
+@supports not (-webkit-backdrop-filter: blur()) {
+  .island.expanded {
+    clip-path: inset(0 round 28px);
+  }
+}

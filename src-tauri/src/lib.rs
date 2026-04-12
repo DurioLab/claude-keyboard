@@ -1,3 +1,4 @@
+pub mod ipc;
 mod hook_installer;
 mod permission;
 mod socket_server;
@@ -63,7 +64,7 @@ pub fn run() {
                     let _screen_h = screen_size.height as f64 / scale;
 
                     let x = (screen_w - WINDOW_WIDTH) / 2.0;
-                    let y = 38.0_f64;
+                    let y = if cfg!(target_os = "macos") { 38.0 } else { 8.0 };
 
                     log::info!(
                         "Screen: {}x{} (scale {}), positioning at ({}, {})",
@@ -71,6 +72,15 @@ pub fn run() {
                     );
 
                     let _ = window.set_position(tauri::LogicalPosition::new(x, y));
+                }
+            }
+
+            // Windows vibrancy
+            #[cfg(target_os = "windows")]
+            {
+                use window_vibrancy::apply_mica;
+                if let Some(window) = app.get_webview_window("main") {
+                    let _ = apply_mica(&window, None);
                 }
             }
 

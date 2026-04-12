@@ -1,13 +1,10 @@
 use serde::{Deserialize, Serialize};
 use std::io::{Read, Write};
-use std::os::unix::net::{UnixListener, UnixStream};
-use std::path::Path;
 use std::sync::{Arc, Mutex};
 use tauri::{AppHandle, Emitter};
 
+use crate::ipc::{IpcListener, IpcStream, cleanup as ipc_cleanup, IPC_PATH};
 use crate::permission::PermissionManager;
-
-const SOCKET_PATH: &str = "/tmp/claude-keyboard.sock";
 
 /// Event received from Claude Code hook script
 #[derive(Debug, Deserialize, Serialize, Clone)]
@@ -30,9 +27,9 @@ pub struct HookResponse {
     pub reason: Option<String>,
 }
 
-/// Pending permission request - holds the open socket connection
+/// Pending permission request - holds the open IPC connection
 struct PendingPermission {
-    stream: UnixStream,
+    stream: IpcStream,
     #[allow(dead_code)]
     event: HookEvent,
 }
@@ -49,36 +46,26 @@ impl SocketServer {
         }
     }
 
-    /// Start the Unix socket server in a background thread
+    /// Start the IPC server in a background thread
     pub fn start(&self, app_handle: AppHandle, permission_mgr: Arc<PermissionManager>) {
         let pending = self.pending.clone();
 
         std::thread::spawn(move || {
-            // Clean up existing socket
-            let _ = std::fs::remove_file(SOCKET_PATH);
+            // Clean up existing socket/pipe
+            ipc_cleanup();
 
-            let listener = match UnixListener::bind(SOCKET_PATH) {
+            let listener = match IpcListener::bind() {
                 Ok(l) => l,
                 Err(e) => {
-                    log::error!("Failed to bind socket at {}: {}", SOCKET_PATH, e);
+                    log::error!("Failed to bind IPC at {}: {}", IPC_PATH, e);
                     return;
                 }
             };
 
-            // Make socket world-writable so the hook script can connect
-            #[cfg(unix)]
-            {
-                use std::os::unix::fs::PermissionsExt;
-                let _ = std::fs::set_permissions(
-                    SOCKET_PATH,
-                    std::fs::Permissions::from_mode(0o777),
-                );
-            }
+            log::info!("IPC server listening on {}", IPC_PATH);
 
-            log::info!("Socket server listening on {}", SOCKET_PATH);
-
-            for stream in listener.incoming() {
-                match stream {
+            loop {
+                match listener.accept() {
                     Ok(stream) => {
                         let app = app_handle.clone();
                         let perm = permission_mgr.clone();
@@ -89,7 +76,7 @@ impl SocketServer {
                         });
                     }
                     Err(e) => {
-                        log::error!("Socket accept error: {}", e);
+                        log::error!("IPC accept error: {}", e);
                     }
                 }
             }
@@ -112,11 +99,9 @@ impl SocketServer {
                         decision,
                         pending.event.tool
                     );
-                    // Explicitly flush and shutdown
+                    // Explicitly flush then drop to close
                     let _ = pending.stream.flush();
-                    let _ = pending
-                        .stream
-                        .shutdown(std::net::Shutdown::Both);
+                    drop(pending);
                     Ok(())
                 }
                 Err(e) => {
@@ -130,7 +115,7 @@ impl SocketServer {
     }
 }
 
-fn read_event(stream: &mut UnixStream) -> Option<Vec<u8>> {
+fn read_event(stream: &mut IpcStream) -> Option<Vec<u8>> {
     // Set a read timeout for initial data
     let _ = stream.set_read_timeout(Some(std::time::Duration::from_secs(5)));
 
@@ -173,7 +158,7 @@ fn read_event(stream: &mut UnixStream) -> Option<Vec<u8>> {
 }
 
 fn handle_client(
-    mut stream: UnixStream,
+    mut stream: IpcStream,
     app: AppHandle,
     permission_mgr: Arc<PermissionManager>,
     pending: Arc<Mutex<Option<PendingPermission>>>,
@@ -221,14 +206,14 @@ fn handle_client(
         // Clear the read timeout - this stream needs to stay open until user decides
         let _ = stream.set_read_timeout(None);
 
-        // Store the pending request (keep socket open for response)
+        // Store the pending request (keep connection open for response)
         log::info!(
-            "Storing pending permission for tool: {:?}, keeping socket alive",
+            "Storing pending permission for tool: {:?}, keeping connection alive",
             event.tool
         );
         {
             let mut pending_guard = pending.lock().unwrap();
-            // Drop any previous pending (closes old socket)
+            // Drop any previous pending (closes old connection)
             if pending_guard.is_some() {
                 log::warn!("Replacing existing pending permission request");
             }
@@ -251,11 +236,8 @@ fn handle_client(
     log::info!("Non-permission event processed: {}", event.event);
 }
 
-/// Cleanup socket on exit
+/// Cleanup IPC on exit
 pub fn cleanup() {
-    let path = Path::new(SOCKET_PATH);
-    if path.exists() {
-        let _ = std::fs::remove_file(path);
-        log::info!("Cleaned up socket file");
-    }
+    ipc_cleanup();
+    log::info!("Cleaned up IPC");
 }

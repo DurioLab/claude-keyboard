@@ -2,8 +2,12 @@ use serde_json;
 use std::fs;
 use std::path::PathBuf;
 
-const HOOK_SCRIPT_NAME: &str = "claude-keyboard.py";
-const HOOK_MARKER: &str = "claude-keyboard.py";
+#[cfg(unix)]
+const HOOK_BINARY_NAME: &str = "claude-keyboard-hook";
+#[cfg(windows)]
+const HOOK_BINARY_NAME: &str = "claude-keyboard-hook.exe";
+
+const HOOK_MARKER: &str = "claude-keyboard-hook";
 
 /// Get the path to ~/.claude/
 fn claude_dir() -> PathBuf {
@@ -12,7 +16,7 @@ fn claude_dir() -> PathBuf {
         .join(".claude")
 }
 
-/// Install the hook script and register it in settings.json
+/// Install the hook binary and register it in settings.json
 pub fn install_hooks(app_handle: &tauri::AppHandle) {
     let claude = claude_dir();
     let hooks_dir = claude.join("hooks");
@@ -21,30 +25,60 @@ pub fn install_hooks(app_handle: &tauri::AppHandle) {
     // Create hooks directory
     let _ = fs::create_dir_all(&hooks_dir);
 
-    // Copy the hook script from bundled resources
-    let script_dest = hooks_dir.join(HOOK_SCRIPT_NAME);
+    // Copy the hook binary from bundled resources
+    let binary_dest = hooks_dir.join(HOOK_BINARY_NAME);
     if let Ok(resource_path) = app_handle
         .path()
-        .resolve("resources/claude-keyboard.py", tauri::path::BaseDirectory::Resource)
+        .resolve(
+            &format!("resources/{}", HOOK_BINARY_NAME),
+            tauri::path::BaseDirectory::Resource,
+        )
     {
-        let _ = fs::copy(&resource_path, &script_dest);
+        let _ = fs::copy(&resource_path, &binary_dest);
     } else {
-        // Fallback: write the script directly (for dev mode)
-        let script_content = include_str!("../resources/claude-keyboard.py");
-        let _ = fs::write(&script_dest, script_content);
+        // Fallback for dev mode: look for compiled binary in target directory
+        let manifest_dir = env!("CARGO_MANIFEST_DIR");
+        let target_debug = PathBuf::from(manifest_dir)
+            .join("target")
+            .join("debug")
+            .join(HOOK_BINARY_NAME);
+        let target_release = PathBuf::from(manifest_dir)
+            .join("target")
+            .join("release")
+            .join(HOOK_BINARY_NAME);
+
+        if target_release.exists() {
+            let _ = fs::copy(&target_release, &binary_dest);
+        } else if target_debug.exists() {
+            let _ = fs::copy(&target_debug, &binary_dest);
+        } else {
+            log::warn!(
+                "Hook binary not found in resources or target directory. Looked at: {:?}, {:?}",
+                target_debug,
+                target_release
+            );
+        }
     }
 
-    // Make executable
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        let _ = fs::set_permissions(&script_dest, fs::Permissions::from_mode(0o755));
-    }
+    // Make executable (Unix only)
+    make_executable(&binary_dest);
 
-    log::info!("Hook script installed to {:?}", script_dest);
+    log::info!("Hook binary installed to {:?}", binary_dest);
 
     // Update settings.json
-    update_settings(&settings_path);
+    update_settings(&settings_path, &hooks_dir);
+}
+
+/// Set executable permissions on Unix, no-op on Windows
+#[cfg(unix)]
+fn make_executable(path: &std::path::Path) {
+    use std::os::unix::fs::PermissionsExt;
+    let _ = fs::set_permissions(path, fs::Permissions::from_mode(0o755));
+}
+
+#[cfg(windows)]
+fn make_executable(_path: &std::path::Path) {
+    // No-op on Windows: executables don't need permission bits
 }
 
 /// Check if hooks are installed
@@ -60,11 +94,11 @@ pub fn is_installed() -> bool {
 /// Uninstall hooks
 pub fn uninstall() {
     let claude = claude_dir();
-    let script_path = claude.join("hooks").join(HOOK_SCRIPT_NAME);
+    let binary_path = claude.join("hooks").join(HOOK_BINARY_NAME);
     let settings_path = claude.join("settings.json");
 
-    // Remove script
-    let _ = fs::remove_file(&script_path);
+    // Remove binary
+    let _ = fs::remove_file(&binary_path);
 
     // Remove from settings.json
     if let Ok(data) = fs::read_to_string(&settings_path) {
@@ -103,7 +137,7 @@ pub fn uninstall() {
     log::info!("Hooks uninstalled");
 }
 
-fn update_settings(settings_path: &PathBuf) {
+fn update_settings(settings_path: &PathBuf, hooks_dir: &PathBuf) {
     // Read existing settings
     let mut json: serde_json::Value = if let Ok(data) = fs::read_to_string(settings_path) {
         serde_json::from_str(&data).unwrap_or_else(|_| serde_json::json!({}))
@@ -111,7 +145,8 @@ fn update_settings(settings_path: &PathBuf) {
         serde_json::json!({})
     };
 
-    let command = format!("python3 ~/.claude/hooks/{}", HOOK_SCRIPT_NAME);
+    let hook_path = hooks_dir.join(HOOK_BINARY_NAME);
+    let command = hook_path.to_string_lossy().to_string();
 
     let hook_entry = serde_json::json!([{"type": "command", "command": command}]);
     let hook_entry_with_timeout =
