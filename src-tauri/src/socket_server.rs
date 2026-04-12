@@ -5,6 +5,8 @@ use tauri::{AppHandle, Emitter};
 
 use crate::ipc::{IpcListener, IpcStream, cleanup as ipc_cleanup, IPC_PATH};
 use crate::permission::PermissionManager;
+use crate::tts::{self, Tts};
+use crate::voice::VoiceManager;
 
 /// Event received from Claude Code hook script
 #[derive(Debug, Deserialize, Serialize, Clone)]
@@ -27,6 +29,12 @@ pub struct HookResponse {
     pub reason: Option<String>,
 }
 
+/// Voice command event payload sent to frontend
+#[derive(Clone, serde::Serialize)]
+struct VoiceCommandPayload {
+    decision: String,
+}
+
 /// Pending permission request - holds the open IPC connection
 struct PendingPermission {
     stream: IpcStream,
@@ -47,7 +55,12 @@ impl SocketServer {
     }
 
     /// Start the IPC server in a background thread
-    pub fn start(&self, app_handle: AppHandle, permission_mgr: Arc<PermissionManager>) {
+    pub fn start(
+        &self,
+        app_handle: AppHandle,
+        permission_mgr: Arc<PermissionManager>,
+        voice_mgr: Option<Arc<VoiceManager>>,
+    ) {
         let pending = self.pending.clone();
 
         std::thread::spawn(move || {
@@ -70,9 +83,9 @@ impl SocketServer {
                         let app = app_handle.clone();
                         let perm = permission_mgr.clone();
                         let pending_clone = pending.clone();
-                        // Handle each client in its own thread to avoid blocking
+                        let voice = voice_mgr.clone();
                         std::thread::spawn(move || {
-                            handle_client(stream, app, perm, pending_clone);
+                            handle_client(stream, app, perm, pending_clone, voice);
                         });
                     }
                     Err(e) => {
@@ -99,7 +112,6 @@ impl SocketServer {
                         decision,
                         pending.event.tool
                     );
-                    // Explicitly flush then drop to close
                     let _ = pending.stream.flush();
                     drop(pending);
                     Ok(())
@@ -116,7 +128,6 @@ impl SocketServer {
 }
 
 fn read_event(stream: &mut IpcStream) -> Option<Vec<u8>> {
-    // Set a read timeout for initial data
     let _ = stream.set_read_timeout(Some(std::time::Duration::from_secs(5)));
 
     let mut all_data = Vec::new();
@@ -124,10 +135,9 @@ fn read_event(stream: &mut IpcStream) -> Option<Vec<u8>> {
 
     loop {
         match stream.read(&mut buf) {
-            Ok(0) => break, // EOF - client closed write side
+            Ok(0) => break,
             Ok(n) => {
                 all_data.extend_from_slice(&buf[..n]);
-                // If we can parse as valid JSON, we have the full message
                 if serde_json::from_slice::<serde_json::Value>(&all_data).is_ok() {
                     break;
                 }
@@ -136,11 +146,9 @@ fn read_event(stream: &mut IpcStream) -> Option<Vec<u8>> {
                 if e.kind() == std::io::ErrorKind::WouldBlock
                     || e.kind() == std::io::ErrorKind::TimedOut =>
             {
-                // Timeout - if we have data, try to use it
                 if !all_data.is_empty() {
                     break;
                 }
-                // Otherwise keep waiting a bit
                 continue;
             }
             Err(e) => {
@@ -162,6 +170,7 @@ fn handle_client(
     app: AppHandle,
     permission_mgr: Arc<PermissionManager>,
     pending: Arc<Mutex<Option<PendingPermission>>>,
+    voice_mgr: Option<Arc<VoiceManager>>,
 ) {
     let data = match read_event(&mut stream) {
         Some(d) => d,
@@ -198,22 +207,20 @@ fn handle_client(
                 let _ = stream.write_all(&data);
                 let _ = stream.flush();
             }
-            // Notify frontend
             let _ = app.emit("permission-auto-approved", &event);
             return;
         }
 
-        // Clear the read timeout - this stream needs to stay open until user decides
+        // Clear the read timeout
         let _ = stream.set_read_timeout(None);
 
-        // Store the pending request (keep connection open for response)
+        // Store the pending request
         log::info!(
             "Storing pending permission for tool: {:?}, keeping connection alive",
             event.tool
         );
         {
             let mut pending_guard = pending.lock().unwrap();
-            // Drop any previous pending (closes old connection)
             if pending_guard.is_some() {
                 log::warn!("Replacing existing pending permission request");
             }
@@ -227,8 +234,44 @@ fn handle_client(
         let _ = app.emit("permission-request", &event);
         log::info!("Permission request emitted to UI for tool: {:?}", event.tool);
 
-        // NOTE: We intentionally do NOT return or drop the stream here.
-        // The stream lives inside PendingPermission until respond() is called.
+        // --- Voice confirmation flow ---
+        // 1. TTS announces the tool name
+        // 2. After TTS finishes, start voice listening
+        if let Some(ref vm) = voice_mgr {
+            let prompt = tts::format_permission_prompt(&tool_name);
+            let vm_clone = vm.clone();
+            let app_clone = app.clone();
+
+            // Pause mic during TTS to avoid self-hearing
+            vm.pause();
+
+            std::thread::spawn(move || {
+                // Speak synchronously (blocks until done)
+                Tts::speak_sync(&prompt);
+
+                // Resume mic and start listening
+                vm_clone.resume();
+
+                if let Err(e) = vm_clone.start_listening(app_clone.clone(), move |decision, text| {
+                    log::info!(
+                        "Voice command received: decision={}, text=\"{}\"",
+                        decision,
+                        text
+                    );
+                    // Emit voice-command event to frontend
+                    // Frontend will handle the UI animation and call respond_permission
+                    let _ = app_clone.emit(
+                        "voice-command",
+                        VoiceCommandPayload {
+                            decision: decision.to_string(),
+                        },
+                    );
+                }) {
+                    log::warn!("Failed to start voice listening: {}", e);
+                }
+            });
+        }
+
         return;
     }
 

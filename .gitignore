@@ -2,3 +2,7 @@
 **/node_modules/
 **/.pnpm-store/
 *.lock
+# Whisper model (too large for git, downloaded in CI)
+src-tauri/resources/ggml-tiny.bin
+# Whisper model (too large for git, downloaded in CI)
+src-tauri/resources/ggml-tiny.bin

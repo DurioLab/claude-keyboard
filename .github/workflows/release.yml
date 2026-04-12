@@ -62,6 +62,13 @@ jobs:
       - name: Install frontend dependencies
         run: pnpm install
 
+      - name: Download Whisper model
+        shell: bash
+        run: |
+          mkdir -p src-tauri/resources
+          curl -L -o src-tauri/resources/ggml-tiny.bin \
+            https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-tiny.bin
+
       - name: Build Tauri app
         run: npx @tauri-apps/cli@latest build --target ${{ matrix.target }}
         env:

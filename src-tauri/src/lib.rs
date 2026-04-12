@@ -1,4 +1,6 @@
 pub mod ipc;
+pub mod tts;
+pub mod voice;
 mod hook_installer;
 mod permission;
 mod socket_server;
@@ -7,6 +9,7 @@ use permission::PermissionManager;
 use socket_server::SocketServer;
 use std::sync::Arc;
 use tauri::Manager;
+use voice::VoiceManager;
 
 const WINDOW_WIDTH: f64 = 600.0;
 const WINDOW_HEIGHT: f64 = 150.0;
@@ -17,6 +20,13 @@ fn respond_permission(
     tool_name: String,
     state: tauri::State<'_, AppState>,
 ) -> Result<(), String> {
+    // Stop voice listening when user confirms via keyboard
+    if let Some(vm) = &state.voice_mgr {
+        vm.stop_listening();
+    }
+    // Stop any ongoing TTS
+    tts::Tts::stop();
+
     let actual_decision = if decision == "allow-always" {
         // Add to whitelist and respond with allow
         state.permission_mgr.add_to_whitelist(&tool_name);
@@ -34,9 +44,10 @@ fn respond_permission(
     state.socket_server.respond(actual_decision, reason)
 }
 
-struct AppState {
-    socket_server: Arc<SocketServer>,
-    permission_mgr: Arc<PermissionManager>,
+pub struct AppState {
+    pub socket_server: Arc<SocketServer>,
+    pub permission_mgr: Arc<PermissionManager>,
+    pub voice_mgr: Option<Arc<VoiceManager>>,
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -84,14 +95,37 @@ pub fn run() {
                 }
             }
 
-            // Start socket server
-            socket_server.start(handle.clone(), permission_mgr.clone());
+            // Initialize VoiceManager (whisper model from resources)
+            let voice_mgr = match app.path().resource_dir() {
+                Ok(res_dir) => {
+                    let model_path = res_dir.join("resources").join("ggml-tiny.bin");
+                    let model_str = model_path.to_string_lossy().to_string();
+                    match VoiceManager::new(&model_str) {
+                        Ok(vm) => {
+                            log::info!("VoiceManager initialized with model: {}", model_str);
+                            Some(Arc::new(vm))
+                        }
+                        Err(e) => {
+                            log::warn!("VoiceManager init failed (voice disabled): {}", e);
+                            None
+                        }
+                    }
+                }
+                Err(e) => {
+                    log::warn!("Could not resolve resource dir (voice disabled): {}", e);
+                    None
+                }
+            };
+
+            // Start socket server with voice manager
+            socket_server.start(handle.clone(), permission_mgr.clone(), voice_mgr.clone());
             log::info!("Socket server started");
 
             // Store state
             app.manage(AppState {
                 socket_server: socket_server.clone(),
                 permission_mgr: permission_mgr.clone(),
+                voice_mgr,
             });
 
             Ok(())

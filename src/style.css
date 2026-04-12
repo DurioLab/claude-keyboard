@@ -47,7 +47,7 @@ body {
 
 /* --- Expanded (permission) state --- */
 .island.expanded {
-  width: 440px;
+  width: 520px;
   height: 130px;
   border-radius: 28px;
   background: rgba(0, 0, 0, 0.95);
@@ -246,6 +246,75 @@ body {
   font-size: 10px;
   color: rgba(255, 255, 255, 0.2);
   letter-spacing: 0.3px;
+}
+
+/* ============================================
+   Mic Status Indicator
+   ============================================ */
+.mic-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 11px;
+  transition: all 0.3s ease;
+}
+
+.mic-icon {
+  font-size: 13px;
+}
+
+.mic-text {
+  opacity: 0.8;
+}
+
+/* Idle - gray */
+.mic-idle {
+  opacity: 0.4;
+}
+
+/* Listening - green pulse */
+.mic-listening {
+  opacity: 1;
+  color: #4ade80;
+}
+
+.mic-listening .mic-icon {
+  animation: mic-pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes mic-pulse {
+  0%, 100% { opacity: 0.6; transform: scale(1); }
+  50% { opacity: 1; transform: scale(1.15); }
+}
+
+/* Processing - orange */
+.mic-processing {
+  opacity: 1;
+  color: #fb923c;
+}
+
+.mic-processing .mic-icon {
+  animation: mic-spin 0.8s linear infinite;
+}
+
+@keyframes mic-spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+/* Recognized - brief flash */
+.mic-recognized {
+  opacity: 1;
+  color: #60a5fa;
+  animation: mic-flash 0.5s ease-out;
+}
+
+@keyframes mic-flash {
+  0% { background: rgba(96, 165, 250, 0.3); }
+  100% { background: transparent; }
 }
 
 /* Windows rounded corner fallback */

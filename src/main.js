@@ -51,7 +51,7 @@ function playSound(action) {
 
 // Window sizes (logical pixels)
 const COMPACT_SIZE = { width: 220, height: 52 };
-const EXPANDED_SIZE = { width: 480, height: 150 };
+const EXPANDED_SIZE = { width: 520, height: 150 };
 
 // Update visual selection
 function updateSelection() {
@@ -102,6 +102,13 @@ async function hidePermission() {
   island.classList.remove('expanded');
   island.classList.add('compact');
   currentRequest = null;
+
+  // Reset mic indicator
+  if (micStatus) {
+    micStatus.className = 'mic-status mic-idle';
+    const mt = micStatus.querySelector('.mic-text');
+    if (mt) mt.textContent = '';
+  }
 
   // Wait for CSS animation to finish, then shrink window
   setTimeout(() => {
@@ -194,6 +201,72 @@ listen('permission-request', (event) => {
 // Listen for auto-approved notifications
 listen('permission-auto-approved', (event) => {
   console.log('Auto-approved:', event.payload);
+});
+
+// ---- Voice Status ----
+const micStatus = document.getElementById('mic-status');
+const micText = micStatus?.querySelector('.mic-text');
+
+const voiceStatusMap = {
+  idle: { class: 'mic-idle', text: '待机' },
+  listening: { class: 'mic-listening', text: '监听中' },
+  processing: { class: 'mic-processing', text: '识别中' },
+  recognized: { class: 'mic-recognized', text: '' }, // text will be set from event
+};
+
+listen('voice-status', (event) => {
+  const { status, text, command } = event.payload;
+  const config = voiceStatusMap[status] || voiceStatusMap.idle;
+
+  if (micStatus) {
+    // Remove all mic-* classes
+    micStatus.className = 'mic-status ' + config.class;
+
+    if (micText) {
+      if (status === 'recognized' && command) {
+        // Show recognized command briefly
+        const commandLabels = {
+          'allow': 'Once ✓',
+          'allow-always': 'Always ✓',
+          'deny': 'Reject ✗'
+        };
+        micText.textContent = commandLabels[command] || text || config.text;
+      } else {
+        micText.textContent = config.text;
+      }
+    }
+  }
+});
+
+// Listen for voice command (triggers confirmation)
+listen('voice-command', (event) => {
+  if (!currentRequest) return;
+  const { decision } = event.payload;
+
+  // Map decision to action
+  const actionMap = {
+    'allow': 'allow-once',
+    'allow-once': 'allow-once',
+    'allow-always': 'allow-always',
+    'deny': 'deny',
+  };
+  const action = actionMap[decision];
+  if (!action) return;
+
+  // Find the matching key and simulate selection + confirm
+  const targetKey = document.querySelector(`.key[data-action="${action}"]`);
+  if (!targetKey) return;
+
+  const idx = Array.from(keys).indexOf(targetKey);
+  if (idx === -1) return;
+
+  selectedIndex = idx;
+  updateSelection();
+
+  // Brief highlight delay before confirming
+  setTimeout(() => {
+    confirmSelection();
+  }, 150);
 });
 
 // Initialize: set compact size on load
