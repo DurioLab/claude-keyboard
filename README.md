@@ -1,57 +1,141 @@
-# Claude Virtual Keyboard
+<div align="center">
 
-A Tauri-based macOS app that provides a virtual keyboard for Claude Code permission confirmations.
+# Claude Keyboard
 
-## How It Works
+**A Dynamic Island-style permission controller for Claude Code.**
 
-1. App installs hooks into `~/.claude/hooks/` and registers them in `~/.claude/settings.json`
-2. When Claude Code needs permission to run a tool, the hook script sends the event via Unix socket
-3. The app pops up a 3-button virtual keyboard: **Reject** | **Allow Always** | **Allow Once**
-4. Your decision is sent back to Claude Code through the hook
+[![GitHub stars](https://img.shields.io/github/stars/DurioLab/claude-keyboard?style=flat-square)](https://github.com/DurioLab/claude-keyboard/stargazers)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?style=flat-square)](LICENSE)
+[![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows-lightgrey?style=flat-square)](#)
+[![Version](https://img.shields.io/badge/version-0.1.0-green?style=flat-square)](#)
+
+Approve, reject, or whitelist Claude Code permissions — with a click, a keystroke, or your voice.
+
+<!-- TODO: Replace with actual demo GIF -->
+![Demo](https://via.placeholder.com/800x450.png?text=Demo+GIF+Coming+Soon)
+
+[Website](https://duriolab.github.io/claude-keyboard) · [Download](https://github.com/DurioLab/claude-keyboard/releases) · [Report Bug](https://github.com/DurioLab/claude-keyboard/issues)
+
+</div>
+
+---
 
 ## Features
 
-- 🎹 Three-button virtual keyboard UI styled like physical key caps
-- ⌨️ Arrow keys (← →) to navigate, Enter to confirm, Esc to reject
-- 🔒 "Allow Always" adds the tool to a session whitelist (auto-approves future requests)
-- 🔌 Unix socket communication with Claude Code hooks
-- 🪟 Transparent, always-on-top, borderless window
+🏝️ **Dynamic Island UI** — Sits as a minimal pill when idle, smoothly expands into a three-button keyboard when a permission request arrives.
 
-## Build
+🎹 **Three Clear Actions** — **Once** (allow this time) · **Always** (whitelist for the session) · **Reject** (deny and move on).
+
+⌨️ **Keyboard-First** — `←` `→` to navigate, `Enter` to confirm, `Esc` to reject. Never leave the keyboard.
+
+🎙️ **Voice Control** — Say "allow" or "reject" and it just works. Powered by local Whisper inference — nothing leaves your machine.
+
+🍄 **Mario Sound Effects** — Satisfying audio feedback on every action. Because why not.
+
+🪟 **Stays Out of Your Way** — Transparent, borderless, always-on-top. Feels native, not bolted on.
+
+🖥️ **Cross-Platform** — macOS (Apple Silicon) and Windows. Unix Socket on Mac, Named Pipe on Windows.
+
+---
+
+## Quick Start
+
+### Option 1: Download Pre-built Binary
+
+Grab the latest release for your platform:
+
+→ [**GitHub Releases**](https://github.com/DurioLab/claude-keyboard/releases)
+
+Launch the app. It auto-installs the Claude Code hooks on startup.
+
+### Option 2: Build from Source
 
 ```bash
-# Prerequisites: Rust 1.70+, Node.js 18+
-cargo build                  # Debug build
-pnpm run build              # Production build (creates .app bundle)
-```
+# Prerequisites: Rust 1.70+, Node.js 18+, pnpm
+git clone https://github.com/DurioLab/claude-keyboard.git
+cd claude-keyboard
 
-## Run
-
-```bash
-# Run in dev mode
+# Dev mode
 cd src-tauri && RUST_LOG=info cargo run
 
-# Or open the built .app
-open src-tauri/target/debug/bundle/macos/Claude\ Keyboard.app
+# Production build
+pnpm run build
 ```
 
-## Test
+---
 
-```bash
-# While the app is running, simulate a permission request
-python3 test_permission.py Bash "rm -rf /tmp/test"
-```
-
-## Architecture
+## How It Works
 
 ```
-Claude Code → Hook Script (Python) → Unix Socket → Tauri App (Rust + HTML)
-                                                         ↓
-                                                    User clicks button
-                                                         ↓
-Claude Code ← Hook Script ← Unix Socket ← Decision (allow/deny)
+┌──────────────┐     ┌──────────────┐     ┌─────────────────────┐
+│  Claude Code │────▶│  Hook Script │────▶│  IPC                │
+│              │     │  (Python)    │     │  Unix Socket (mac)  │
+│              │     │              │     │  Named Pipe (win)   │
+└──────┬───────┘     └──────────────┘     └──────────┬──────────┘
+       │                                             │
+       │                                             ▼
+       │                                  ┌─────────────────────┐
+       │                                  │  Claude Keyboard    │
+       │                                  │  (Tauri + Rust)     │
+       │                                  │                     │
+       │                                  │  [Once] [Always]    │
+       │                                  │       [Reject]      │
+       │                                  └──────────┬──────────┘
+       │                                             │
+       ▼                                             ▼
+┌──────────────┐                          ┌─────────────────────┐
+│  Continues / │◀─────────────────────────│  User Decision      │
+│  Stops       │      IPC response        │  click / key / voice│
+└──────────────┘                          └─────────────────────┘
 ```
 
-## Uninstall Hooks
+1. Claude Code triggers a permission hook.
+2. The hook script sends the request over IPC.
+3. Claude Keyboard expands from pill → keyboard.
+4. You decide. The response flows back instantly.
 
-The hooks are automatically installed on app launch. To remove them, delete the relevant entries from `~/.claude/settings.json` and remove `~/.claude/hooks/claude-keyboard.py`.
+---
+
+## Voice Control
+
+Claude Keyboard includes built-in voice recognition powered by [whisper-rs](https://github.com/tazz4843/whisper-rs) — fully local, no network calls.
+
+| Command | Action |
+|---------|--------|
+| "allow" / "yes" / "once" | Allow once |
+| "always" | Allow always |
+| "reject" / "no" / "deny" | Reject |
+
+Voice recognition activates automatically when a permission request is pending.
+
+---
+
+## Tech Stack
+
+| Layer | Tech |
+|-------|------|
+| App framework | [Tauri 2](https://tauri.app/) |
+| Backend | Rust |
+| Frontend | HTML / CSS / JS |
+| Voice | whisper-rs (local) |
+| IPC | Unix Socket / Named Pipe |
+
+---
+
+## Contributing
+
+Contributions are welcome! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+
+---
+
+## License
+
+[MIT](LICENSE)
+
+---
+
+<div align="center">
+
+Built with ❤️ by [DurioLab](https://github.com/DurioLab)
+
+</div>
