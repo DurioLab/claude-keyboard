@@ -2,16 +2,21 @@
 name = "claude-virtual-keyboard"
 version = "0.1.0"
 edition = "2021"
+default-run = "claude-virtual-keyboard"
 
 [lib]
 name = "claude_virtual_keyboard_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
+[[bin]]
+name = "claude-keyboard-hook"
+path = "src/bin/hook.rs"
+
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-tauri = { version = "2", features = ["tray-icon", "macos-private-api"] }
+tauri = { version = "2", features = ["macos-private-api", "tray-icon"] }
 tauri-plugin-shell = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
@@ -19,3 +24,10 @@ tokio = { version = "1", features = ["full"] }
 log = "0.4"
 env_logger = "0.11"
 dirs = "6"
+
+[target.'cfg(target_os = "macos")'.dependencies]
+tauri = { version = "2", features = ["tray-icon", "macos-private-api"] }
+
+[target.'cfg(target_os = "windows")'.dependencies]
+window-vibrancy = "0.5"
+windows-sys = { version = "0.59", features = ["Win32_Foundation", "Win32_Storage_FileSystem", "Win32_System_Pipes", "Win32_Security"] }
