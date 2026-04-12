@@ -90,9 +90,12 @@ mod platform {
         CreateFileW, FlushFileBuffers, ReadFile, WriteFile, OPEN_EXISTING,
     };
     use windows_sys::Win32::System::Pipes::{
-        ConnectNamedPipe, CreateNamedPipeW, PIPE_ACCESS_DUPLEX, PIPE_READMODE_BYTE,
+        ConnectNamedPipe, CreateNamedPipeW, PIPE_READMODE_BYTE,
         PIPE_TYPE_BYTE, PIPE_UNLIMITED_INSTANCES, PIPE_WAIT,
     };
+
+    // PIPE_ACCESS_DUPLEX is not exported in windows-sys 0.59; define manually.
+    const PIPE_ACCESS_DUPLEX: u32 = 0x00000003;
 
     const BUFFER_SIZE: u32 = 65536;
 
