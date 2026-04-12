@@ -7,32 +7,36 @@
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-  <div id="app" class="hidden">
-    <div class="tool-info">
-      <span class="tool-icon">⚡</span>
-      <span id="tool-name" class="tool-name">Tool</span>
+  <div id="island" class="island compact">
+    <!-- Compact state (idle) -->
+    <div class="island-compact">
+      <span class="compact-dot"></span>
+      <span class="compact-text">Claude</span>
     </div>
-    <div class="keyboard">
-      <button class="key" data-action="deny" tabindex="-1">
-        <span class="key-label">Reject</span>
-        <span class="key-hint">←</span>
-      </button>
-      <button class="key selected" data-action="allow-always" tabindex="-1">
-        <span class="key-label">Allow Always</span>
-        <span class="key-hint">●</span>
-      </button>
-      <button class="key" data-action="allow-once" tabindex="-1">
-        <span class="key-label">Allow Once</span>
-        <span class="key-hint">→</span>
-      </button>
+    <!-- Expanded state (permission request) -->
+    <div class="island-expanded">
+      <div class="tool-info">
+        <span class="tool-icon">⚡</span>
+        <span id="tool-name" class="tool-name">Tool</span>
+      </div>
+      <div class="keyboard">
+        <button class="key" data-action="allow-once" tabindex="-1">
+          <span class="key-label">Once</span>
+          <span class="key-hint">←</span>
+        </button>
+        <button class="key selected" data-action="allow-always" tabindex="-1">
+          <span class="key-label">Always</span>
+          <span class="key-hint">●</span>
+        </button>
+        <button class="key" data-action="deny" tabindex="-1">
+          <span class="key-label">Reject</span>
+          <span class="key-hint">→</span>
+        </button>
+      </div>
+      <div class="status-bar">
+        <span class="hint">← → navigate · Enter confirm · Esc reject</span>
+      </div>
     </div>
-    <div class="status-bar">
-      <span class="hint">← → navigate · Enter confirm · Esc cancel</span>
-    </div>
-  </div>
-  <div id="idle" class="idle-state">
-    <div class="idle-icon">⌨️</div>
-    <div class="idle-text">Waiting for Claude...</div>
   </div>
   <script src="main.js"></script>
 </body>

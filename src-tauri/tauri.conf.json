@@ -15,13 +15,12 @@
     "windows": [
       {
         "title": "Claude Keyboard",
-        "width": 460,
-        "height": 160,
+        "width": 600,
+        "height": 150,
         "resizable": false,
         "decorations": false,
         "transparent": true,
         "alwaysOnTop": true,
-        "center": true,
         "skipTaskbar": true,
         "visible": true
       }

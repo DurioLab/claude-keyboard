@@ -11,164 +11,213 @@ body {
   background: transparent;
   overflow: hidden;
   -webkit-font-smoothing: antialiased;
+  display: flex;
+  justify-content: center;
+  padding-top: 8px;
+  min-height: 100vh;
 }
 
-/* Idle state */
-.idle-state {
+/* ============================================
+   Island Container — the core shape
+   ============================================ */
+.island {
+  position: relative;
+  background: #000;
+  overflow: hidden;
   display: flex;
-  flex-direction: column;
   align-items: center;
   justify-content: center;
-  height: 100vh;
-  color: rgba(255, 255, 255, 0.3);
-  background: rgba(30, 30, 30, 0.85);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-  border-radius: 16px;
+  border: 0.5px solid rgba(255, 255, 255, 0.08);
+  box-shadow:
+    0 4px 24px rgba(0, 0, 0, 0.4),
+    0 0 0 0.5px rgba(255, 255, 255, 0.06);
+  /* Smooth transitions for all state changes */
+  transition:
+    width 0.45s cubic-bezier(0.34, 1.56, 0.64, 1),
+    height 0.45s cubic-bezier(0.34, 1.56, 0.64, 1),
+    border-radius 0.45s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
-.idle-icon {
-  font-size: 32px;
-  margin-bottom: 8px;
-  opacity: 0.5;
+/* --- Compact (idle) state --- */
+.island.compact {
+  width: 200px;
+  height: 36px;
+  border-radius: 20px;
 }
 
-.idle-text {
-  font-size: 13px;
-  font-weight: 500;
+/* --- Expanded (permission) state --- */
+.island.expanded {
+  width: 440px;
+  height: 130px;
+  border-radius: 28px;
+  background: rgba(0, 0, 0, 0.95);
+  -webkit-backdrop-filter: blur(30px);
+  backdrop-filter: blur(30px);
+}
+
+/* ============================================
+   Compact content
+   ============================================ */
+.island-compact {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  position: absolute;
+  opacity: 1;
+  transform: scale(1);
+  transition:
+    opacity 0.2s ease,
+    transform 0.2s ease;
+}
+
+.island.expanded .island-compact {
+  opacity: 0;
+  transform: scale(0.8);
+  pointer-events: none;
+}
+
+.compact-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #34d399;
+  box-shadow: 0 0 6px rgba(52, 211, 153, 0.5);
+  animation: pulse 2.5s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 0.6; transform: scale(1); }
+  50% { opacity: 1; transform: scale(1.15); }
+}
+
+.compact-text {
+  font-size: 11px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.4);
   letter-spacing: 0.5px;
 }
 
-/* Main app container */
-#app {
+/* ============================================
+   Expanded content
+   ============================================ */
+.island-expanded {
+  position: absolute;
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 16px 20px 12px;
-  background: rgba(30, 30, 30, 0.92);
-  backdrop-filter: blur(30px);
-  -webkit-backdrop-filter: blur(30px);
-  border-radius: 16px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.05);
-  animation: slideUp 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  width: 100%;
+  padding: 12px 20px 10px;
+  opacity: 0;
+  transform: scale(0.85);
+  transition:
+    opacity 0.3s ease 0.15s,
+    transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1) 0.1s;
+  pointer-events: none;
 }
 
-#app.hidden {
-  display: none;
+.island.expanded .island-expanded {
+  opacity: 1;
+  transform: scale(1);
+  pointer-events: auto;
 }
 
-@keyframes slideUp {
-  from {
-    opacity: 0;
-    transform: translateY(10px) scale(0.98);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-  }
-}
-
-/* Tool info bar */
+/* ============================================
+   Tool info bar
+   ============================================ */
 .tool-info {
   display: flex;
   align-items: center;
   gap: 6px;
-  margin-bottom: 14px;
-  padding: 4px 12px;
-  background: rgba(255, 255, 255, 0.06);
+  margin-bottom: 10px;
+  padding: 3px 10px;
+  background: rgba(255, 255, 255, 0.07);
   border-radius: 8px;
   max-width: 100%;
 }
 
 .tool-icon {
-  font-size: 12px;
+  font-size: 11px;
 }
 
 .tool-name {
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 600;
-  color: rgba(255, 255, 255, 0.7);
+  color: rgba(255, 255, 255, 0.6);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 380px;
+  max-width: 360px;
 }
 
-/* Keyboard layout */
+/* ============================================
+   Keyboard (3 buttons)
+   ============================================ */
 .keyboard {
   display: flex;
   gap: 8px;
 }
 
-/* Key button style */
 .key {
   position: relative;
-  width: 130px;
-  height: 64px;
+  width: 120px;
+  height: 52px;
   border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 10px;
-  background: linear-gradient(180deg, rgba(70, 70, 70, 0.8) 0%, rgba(50, 50, 50, 0.8) 100%);
-  color: rgba(255, 255, 255, 0.75);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.07);
+  color: rgba(255, 255, 255, 0.65);
   cursor: pointer;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 4px;
+  gap: 3px;
   transition: all 0.15s ease;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3), 0 1px 0 rgba(255, 255, 255, 0.05) inset;
   outline: none;
 }
 
 .key:hover {
-  background: linear-gradient(180deg, rgba(80, 80, 80, 0.9) 0%, rgba(60, 60, 60, 0.9) 100%);
-  border-color: rgba(255, 255, 255, 0.15);
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.18);
 }
 
 .key:active,
 .key.pressed {
-  transform: translateY(1px);
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
-  background: linear-gradient(180deg, rgba(50, 50, 50, 0.9) 0%, rgba(40, 40, 40, 0.9) 100%);
+  transform: scale(0.95);
 }
 
-/* Selected key */
+/* --- Selected states with color --- */
 .key.selected {
-  border-color: rgba(99, 102, 241, 0.6);
-  background: linear-gradient(180deg, rgba(79, 70, 229, 0.5) 0%, rgba(67, 56, 202, 0.5) 100%);
+  border-color: rgba(99, 102, 241, 0.5);
+  background: rgba(99, 102, 241, 0.25);
   color: #fff;
-  box-shadow: 0 2px 8px rgba(99, 102, 241, 0.3), 0 1px 0 rgba(255, 255, 255, 0.1) inset;
 }
 
 .key.selected::after {
   content: '';
   position: absolute;
-  bottom: -4px;
+  bottom: -3px;
   left: 50%;
   transform: translateX(-50%);
-  width: 20px;
+  width: 18px;
   height: 3px;
   border-radius: 2px;
   background: rgb(99, 102, 241);
 }
 
-/* Reject key special color */
+/* Reject */
 .key[data-action="deny"].selected {
-  border-color: rgba(239, 68, 68, 0.6);
-  background: linear-gradient(180deg, rgba(220, 38, 38, 0.5) 0%, rgba(185, 28, 28, 0.5) 100%);
-  box-shadow: 0 2px 8px rgba(239, 68, 68, 0.3), 0 1px 0 rgba(255, 255, 255, 0.1) inset;
+  border-color: rgba(239, 68, 68, 0.5);
+  background: rgba(239, 68, 68, 0.25);
 }
 
 .key[data-action="deny"].selected::after {
   background: rgb(239, 68, 68);
 }
 
-/* Allow Once key color */
+/* Allow Once */
 .key[data-action="allow-once"].selected {
-  border-color: rgba(34, 197, 94, 0.6);
-  background: linear-gradient(180deg, rgba(22, 163, 74, 0.5) 0%, rgba(21, 128, 61, 0.5) 100%);
-  box-shadow: 0 2px 8px rgba(34, 197, 94, 0.3), 0 1px 0 rgba(255, 255, 255, 0.1) inset;
+  border-color: rgba(34, 197, 94, 0.5);
+  background: rgba(34, 197, 94, 0.25);
 }
 
 .key[data-action="allow-once"].selected::after {
@@ -182,17 +231,19 @@ body {
 }
 
 .key-hint {
-  font-size: 10px;
-  opacity: 0.4;
+  font-size: 9px;
+  opacity: 0.35;
 }
 
-/* Status bar */
+/* ============================================
+   Status bar
+   ============================================ */
 .status-bar {
-  margin-top: 10px;
+  margin-top: 8px;
 }
 
 .hint {
   font-size: 10px;
-  color: rgba(255, 255, 255, 0.25);
+  color: rgba(255, 255, 255, 0.2);
   letter-spacing: 0.3px;
 }

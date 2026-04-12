@@ -1,13 +1,57 @@
 const { invoke } = window.__TAURI__.core;
 const { listen } = window.__TAURI__.event;
+const { getCurrentWindow } = window.__TAURI__.window;
 
+const island = document.getElementById('island');
 const keys = document.querySelectorAll('.key');
-const app = document.getElementById('app');
-const idle = document.getElementById('idle');
 const toolNameEl = document.getElementById('tool-name');
+const appWindow = getCurrentWindow();
 
 let selectedIndex = 1; // Default: Allow Always (middle)
 let currentRequest = null;
+
+// ---- Mario-style Sound Effects (Web Audio API) ----
+const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+function playNote(freq, duration, volume, type, startTime) {
+  const osc = audioCtx.createOscillator();
+  const gain = audioCtx.createGain();
+  osc.type = type;
+  osc.frequency.setValueAtTime(freq, startTime);
+  gain.gain.setValueAtTime(volume, startTime);
+  gain.gain.exponentialRampToValueAtTime(0.001, startTime + duration);
+  osc.connect(gain).connect(audioCtx.destination);
+  osc.start(startTime);
+  osc.stop(startTime + duration);
+}
+
+function playSound(action) {
+  const now = audioCtx.currentTime;
+
+  if (action === 'allow-once') {
+    // Single coin: B5 -> E6
+    playNote(988, 0.08, 0.16, 'square', now);
+    playNote(1319, 0.35, 0.16, 'square', now + 0.08);
+  } else if (action === 'allow-always') {
+    // Multi coins: C6 -> E6 -> G6 -> C7 rapid, then E7 finale
+    const notes = [1047, 1319, 1568, 2093];
+    notes.forEach((freq, i) => {
+      playNote(freq, 0.08, 0.15, 'square', now + i * 0.1);
+    });
+    playNote(2637, 0.3, 0.16, 'square', now + 0.4);
+  } else if (action === 'deny') {
+    // Failure: descending half-steps, triangle wave
+    const deathNotes = [494, 466, 440, 415, 392, 370];
+    deathNotes.forEach((freq, i) => {
+      playNote(freq, 0.1, 0.14 - i * 0.01, 'triangle', now + i * 0.1);
+    });
+    playNote(330, 0.2, 0.08, 'triangle', now + 0.6);
+  }
+}
+
+// Window sizes (logical pixels)
+const COMPACT_SIZE = { width: 220, height: 52 };
+const EXPANDED_SIZE = { width: 480, height: 150 };
 
 // Update visual selection
 function updateSelection() {
@@ -16,22 +60,52 @@ function updateSelection() {
   });
 }
 
-// Show permission UI
-function showPermission(event) {
+// Resize window and re-center horizontally
+async function resizeWindow(size) {
+  try {
+    const monitor = await appWindow.currentMonitor();
+    if (monitor) {
+      const scale = monitor.scaleFactor;
+      const screenW = monitor.size.width / scale;
+      const x = (screenW - size.width) / 2;
+      const y = 38;
+      await appWindow.setSize(new window.__TAURI__.window.LogicalSize(size.width, size.height));
+      await appWindow.setPosition(new window.__TAURI__.window.LogicalPosition(x, y));
+    } else {
+      await appWindow.setSize(new window.__TAURI__.window.LogicalSize(size.width, size.height));
+    }
+  } catch (e) {
+    console.error('Failed to resize window:', e);
+  }
+}
+
+// Show permission UI — expand the island
+async function showPermission(event) {
   currentRequest = event;
   const toolName = event.tool || 'Unknown Tool';
   toolNameEl.textContent = toolName;
-  idle.style.display = 'none';
-  app.classList.remove('hidden');
+
   selectedIndex = 1; // Reset to Allow Always
   updateSelection();
+
+  // Resize window first, then animate island
+  await resizeWindow(EXPANDED_SIZE);
+  requestAnimationFrame(() => {
+    island.classList.remove('compact');
+    island.classList.add('expanded');
+  });
 }
 
-// Hide permission UI
-function hidePermission() {
-  app.classList.add('hidden');
-  idle.style.display = 'flex';
+// Hide permission UI — shrink back to pill
+async function hidePermission() {
+  island.classList.remove('expanded');
+  island.classList.add('compact');
   currentRequest = null;
+
+  // Wait for CSS animation to finish, then shrink window
+  setTimeout(() => {
+    resizeWindow(COMPACT_SIZE);
+  }, 350);
 }
 
 // Confirm selection
@@ -67,6 +141,9 @@ async function confirmSelection() {
     console.error('Failed to respond:', e);
   }
 
+  // Play Mario sound effect
+  playSound(action);
+
   hidePermission();
 }
 
@@ -91,8 +168,7 @@ document.addEventListener('keydown', (e) => {
       break;
     case 'Escape':
       e.preventDefault();
-      // Escape = deny
-      selectedIndex = 0;
+      selectedIndex = 2; // Reject is now on the right (index 2)
       updateSelection();
       confirmSelection();
       break;
@@ -114,8 +190,10 @@ listen('permission-request', (event) => {
   showPermission(event.payload);
 });
 
-// Listen for auto-approved notifications (for visual feedback)
+// Listen for auto-approved notifications
 listen('permission-auto-approved', (event) => {
-  // Could show a brief toast, for now just log
   console.log('Auto-approved:', event.payload);
 });
+
+// Initialize: set compact size on load
+resizeWindow(COMPACT_SIZE);

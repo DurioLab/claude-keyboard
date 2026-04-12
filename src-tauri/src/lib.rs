@@ -7,6 +7,9 @@ use socket_server::SocketServer;
 use std::sync::Arc;
 use tauri::Manager;
 
+const WINDOW_WIDTH: f64 = 600.0;
+const WINDOW_HEIGHT: f64 = 150.0;
+
 #[tauri::command]
 fn respond_permission(
     decision: String,
@@ -50,6 +53,26 @@ pub fn run() {
             // Install hooks on startup
             hook_installer::install_hooks(&handle);
             log::info!("Hooks installed: {}", hook_installer::is_installed());
+
+            // Position window at top center of screen
+            if let Some(window) = app.get_webview_window("main") {
+                if let Some(monitor) = window.current_monitor().ok().flatten() {
+                    let screen_size = monitor.size();
+                    let scale = monitor.scale_factor();
+                    let screen_w = screen_size.width as f64 / scale;
+                    let _screen_h = screen_size.height as f64 / scale;
+
+                    let x = (screen_w - WINDOW_WIDTH) / 2.0;
+                    let y = 38.0_f64;
+
+                    log::info!(
+                        "Screen: {}x{} (scale {}), positioning at ({}, {})",
+                        screen_size.width, screen_size.height, scale, x, y
+                    );
+
+                    let _ = window.set_position(tauri::LogicalPosition::new(x, y));
+                }
+            }
 
             // Start socket server
             socket_server.start(handle.clone(), permission_mgr.clone());
