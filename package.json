@@ -2,6 +2,7 @@
   "name": "claude-virtual-keyboard",
   "version": "0.1.0",
   "private": true,
+  "packageManager": "pnpm@9.15.9",
   "scripts": {
     "dev": "npx @tauri-apps/cli@latest dev",
     "build": "npx @tauri-apps/cli@latest build"
