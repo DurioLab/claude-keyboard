@@ -87,8 +87,9 @@ mod platform {
         ERROR_PIPE_CONNECTED,
     };
     use windows_sys::Win32::Storage::FileSystem::{
-        CreateFileW, FlushFileBuffers, ReadFile, WriteFile, OPEN_EXISTING,
+        CreateFileW, FlushFileBuffers, OPEN_EXISTING,
     };
+    use windows_sys::Win32::System::IO::{ReadFile, WriteFile};
     use windows_sys::Win32::System::Pipes::{
         ConnectNamedPipe, CreateNamedPipeW, PIPE_READMODE_BYTE,
         PIPE_TYPE_BYTE, PIPE_UNLIMITED_INSTANCES, PIPE_WAIT,
@@ -171,7 +172,7 @@ mod platform {
                     ptr::null(),
                     OPEN_EXISTING,
                     0,
-                    0,
+                    ptr::null_mut(),
                 )
             };
             if handle == INVALID_HANDLE_VALUE {
