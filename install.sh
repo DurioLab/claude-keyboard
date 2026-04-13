@@ -74,13 +74,32 @@ DMG_PATH="${TMPDIR_PATH}/${APP_NAME}.dmg"
 trap 'rm -rf "$TMPDIR_PATH"' EXIT
 
 info "正在下载 ${DMG_URL##*/}..."
-curl -fSL --progress-bar -o "$DMG_PATH" "$DMG_URL" \
-  || error "下载失败"
+if ! curl -fSL --progress-bar --http1.1 --connect-timeout 15 -o "$DMG_PATH" "$DMG_URL" 2>/dev/null; then
+  # 直连失败，尝试镜像下载
+  if [[ -z "$GH_PROXY" ]]; then
+    warn "直连下载失败，尝试镜像..."
+    MIRROR_URL="https://ghfast.top/${DMG_URL}"
+    curl -fSL --progress-bar --connect-timeout 15 -o "$DMG_PATH" "$MIRROR_URL" \
+      || error "下载失败，请设置代理后重试:\n  export https_proxy=http://127.0.0.1:7890"
+  else
+    error "下载失败，请设置代理后重试:\n  export https_proxy=http://127.0.0.1:7890"
+  fi
+fi
+
+# 校验下载文件是否为有效 DMG
+FILE_TYPE=$(file -b "$DMG_PATH" 2>/dev/null || true)
+if ! echo "$FILE_TYPE" | grep -qi "compressed\|zlib\|bzip2\|disk image\|Apple"; then
+  warn "下载的文件可能不是有效的 DMG (类型: ${FILE_TYPE})"
+  warn "如果使用镜像下载，可能获取到了重定向页面"
+  error "请尝试设置代理后重试:\n  export https_proxy=http://127.0.0.1:7890"
+fi
 
 # 挂载 DMG
 info "正在安装..."
-MOUNT_POINT=$(hdiutil attach "$DMG_PATH" -nobrowse -quiet | tail -1 | awk '{print $NF}')
-[[ -d "$MOUNT_POINT" ]] || error "DMG 挂载失败"
+MOUNT_OUTPUT=$(hdiutil attach "$DMG_PATH" -nobrowse 2>&1) \
+  || error "DMG 挂载失败:\n${MOUNT_OUTPUT}"
+MOUNT_POINT=$(echo "$MOUNT_OUTPUT" | grep '/Volumes/' | sed 's/.*\(\/Volumes\/.*\)/\1/' | head -1)
+[[ -d "$MOUNT_POINT" ]] || error "DMG 挂载失败: 无法解析挂载点"
 
 # 拷贝到 /Applications
 APP_SRC=$(find "$MOUNT_POINT" -maxdepth 1 -name "*.app" | head -1)
@@ -93,7 +112,7 @@ cp -R "$APP_SRC" "${INSTALL_DIR}/"
 hdiutil detach "$MOUNT_POINT" -quiet 2>/dev/null || true
 
 # 移除 quarantine（关键步骤）
-xattr -cr "${INSTALL_DIR}/${APP_NAME}.app"
+find "${INSTALL_DIR}/${APP_NAME}.app" -exec xattr -c {} + 2>/dev/null || true
 
 info "安装完成! ${APP_NAME} ${VERSION}"
 echo ""
