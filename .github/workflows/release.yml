@@ -69,6 +69,17 @@ jobs:
           curl -L -o src-tauri/resources/ggml-tiny.bin \
             https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-tiny.bin
 
+      - name: Build hook binary
+        shell: bash
+        run: |
+          cd src-tauri
+          cargo build --bin claude-keyboard-hook --release --target ${{ matrix.target }}
+          if [ "${{ matrix.os_name }}" = "macos" ]; then
+            cp target/${{ matrix.target }}/release/claude-keyboard-hook resources/claude-keyboard-hook
+          else
+            cp target/${{ matrix.target }}/release/claude-keyboard-hook.exe resources/claude-keyboard-hook.exe
+          fi
+
       - name: Build Tauri app
         run: npx @tauri-apps/cli@latest build --target ${{ matrix.target }}
         env:
