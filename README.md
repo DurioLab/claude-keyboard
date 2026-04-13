@@ -40,7 +40,15 @@ Approve, reject, or whitelist Claude Code permissions — with a click, a keystr
 
 ## Quick Start
 
-### Option 1: Download Pre-built Binary
+### Option 1: One-Line Install (macOS)
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/DurioLab/claude-keyboard/main/install.sh | bash
+```
+
+Auto-detects Apple Silicon / Intel, downloads the latest release, installs to `/Applications`, and removes quarantine. Done.
+
+### Option 2: Download Manually
 
 Grab the latest release for your platform:
 
@@ -48,7 +56,7 @@ Grab the latest release for your platform:
 
 Launch the app. It auto-installs the Claude Code hooks on startup.
 
-### Option 2: Build from Source
+### Option 3: Build from Source
 
 ```bash
 # Prerequisites: Rust 1.70+, Node.js 18+, pnpm
