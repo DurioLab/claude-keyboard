@@ -29,7 +29,7 @@ fn position_window(window: &tauri::WebviewWindow, width: f64, height: f64) {
         let screen_w = screen_size.width as f64 / scale;
 
         let x = (screen_w - width) / 2.0;
-        let y = if cfg!(target_os = "macos") { 38.0 } else { 8.0 };
+        let y = 0.0;
 
         log::info!(
             "Screen: {}x{} (scale {}), positioning at ({}, {})",

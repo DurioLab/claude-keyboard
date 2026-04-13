@@ -26,7 +26,7 @@ function playNote(freq, duration, volume, type, startTime) {
   osc.stop(startTime + duration);
 }
 
-function playSound(action) {
+function scheduleSound(action) {
   const now = audioCtx.currentTime;
 
   if (action === 'allow-once') {
@@ -47,6 +47,21 @@ function playSound(action) {
       playNote(freq, 0.1, 0.14 - i * 0.01, 'triangle', now + i * 0.1);
     });
     playNote(330, 0.2, 0.08, 'triangle', now + 0.6);
+  }
+}
+
+function playSound(action) {
+  try {
+    if (audioCtx.state === 'suspended') {
+      audioCtx.resume().then(() => scheduleSound(action)).catch((e) => {
+        console.error('Failed to resume audio context:', e);
+      });
+      return;
+    }
+
+    scheduleSound(action);
+  } catch (e) {
+    console.error('Failed to play sound:', e);
   }
 }
 
@@ -97,8 +112,7 @@ async function resizeWindow(size) {
       // Include monitor's own x-offset (for multi-monitor setups)
       const monitorX = monitor.position ? monitor.position.x / scale : 0;
       const x = monitorX + (screenW - size.width) / 2;
-      const isMac = navigator.platform.startsWith('Mac') || navigator.userAgent.includes('Mac');
-      const y = isMac ? 38 : 8;
+      const y = 0;
       await appWindow.setSize(new window.__TAURI__.window.LogicalSize(size.width, size.height));
       await appWindow.setPosition(new window.__TAURI__.window.LogicalPosition(x, y));
     } else {
@@ -139,10 +153,8 @@ async function showPermission(event) {
   });
 }
 
-// Hide permission UI — collapse island, then hide window
+// Hide permission UI — hide window immediately, then reset while hidden
 async function hidePermission() {
-  island.classList.remove('expanded');
-  island.classList.add('compact');
   currentRequest = null;
 
   // Reset mic indicator
@@ -155,15 +167,16 @@ async function hidePermission() {
   // Clear tool description
   if (toolDescEl) toolDescEl.textContent = '';
 
-  // Wait for CSS animation to finish, then shrink and hide window
-  setTimeout(async () => {
-    await resizeWindow(COMPACT_SIZE);
-    try {
-      await appWindow.hide();
-    } catch (e) {
-      console.error('Failed to hide window:', e);
-    }
-  }, 350);
+  try {
+    await appWindow.hide();
+  } catch (e) {
+    console.error('Failed to hide window:', e);
+  }
+
+  island.classList.remove('expanded');
+  island.classList.add('compact');
+
+  await resizeWindow(COMPACT_SIZE);
 }
 
 // Confirm selection
@@ -190,6 +203,9 @@ async function confirmSelection() {
       break;
   }
 
+  // Play sound before the first await so it keeps the original user gesture.
+  playSound(action);
+
   try {
     await invoke('respond_permission', {
       decision: decision,
@@ -199,10 +215,7 @@ async function confirmSelection() {
     console.error('Failed to respond:', e);
   }
 
-  // Play Mario sound effect
-  playSound(action);
-
-  hidePermission();
+  await hidePermission();
 }
 
 // Keyboard navigation
