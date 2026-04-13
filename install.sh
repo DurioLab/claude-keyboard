@@ -29,13 +29,32 @@ case "$ARCH" in
   *)      error "不支持的架构: $ARCH" ;;
 esac
 
-# 获取最新 release
+# GitHub API 地址（支持镜像回退）
+GH_API="https://api.github.com"
+GH_PROXY=""
+
+# 获取最新 release（自动回退镜像）
 info "正在获取最新版本..."
-RELEASE_JSON=$(curl -fsSL "https://api.github.com/repos/${REPO}/releases/latest") \
-  || error "无法获取 release 信息，请检查网络连接"
+RELEASE_JSON=$(curl -fsSL --connect-timeout 10 "${GH_API}/repos/${REPO}/releases/latest" 2>/dev/null) || true
+
+if [[ -z "$RELEASE_JSON" ]] || echo "$RELEASE_JSON" | grep -q '"message"'; then
+  warn "GitHub API 不可用，尝试镜像..."
+  GH_PROXY="https://ghfast.top/"
+  RELEASE_JSON=$(curl -fsSL --connect-timeout 10 "${GH_PROXY}https://api.github.com/repos/${REPO}/releases/latest" 2>/dev/null) || true
+fi
+
+if [[ -z "$RELEASE_JSON" ]] || echo "$RELEASE_JSON" | grep -q '"message"'; then
+  echo ""
+  error "无法获取 release 信息。如果你在国内，请设置代理后重试:\n  export https_proxy=http://127.0.0.1:7890\n  然后重新运行安装脚本"
+fi
 
 VERSION=$(echo "$RELEASE_JSON" | grep '"tag_name"' | head -1 | sed 's/.*"tag_name": *"\([^"]*\)".*/\1/')
 DMG_URL=$(echo "$RELEASE_JSON" | grep '"browser_download_url"' | grep "$DMG_PATTERN" | head -1 | sed 's/.*"browser_download_url": *"\([^"]*\)".*/\1/')
+
+# 如果使用镜像，给下载 URL 也加上代理前缀
+if [[ -n "$GH_PROXY" ]] && [[ -n "$DMG_URL" ]]; then
+  DMG_URL="${GH_PROXY}${DMG_URL}"
+fi
 
 [[ -n "$VERSION" ]]  || error "无法解析版本号"
 [[ -n "$DMG_URL" ]]  || error "未找到适用于 ${ARCH} 的 DMG 文件"
