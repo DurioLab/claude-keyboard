@@ -167,16 +167,14 @@ async function hidePermission() {
   // Clear tool description
   if (toolDescEl) toolDescEl.textContent = '';
 
+  island.classList.remove('expanded');
+  island.classList.add('compact');
+
   try {
     await appWindow.hide();
   } catch (e) {
     console.error('Failed to hide window:', e);
   }
-
-  island.classList.remove('expanded');
-  island.classList.add('compact');
-
-  await resizeWindow(COMPACT_SIZE);
 }
 
 // Confirm selection
@@ -220,6 +218,11 @@ async function confirmSelection() {
 
 // Keyboard navigation
 document.addEventListener('keydown', (e) => {
+  // Pre-warm AudioContext on any key interaction so it's running by the time Enter is pressed
+  if (audioCtx.state !== 'running') {
+    audioCtx.resume().catch(() => {});
+  }
+
   if (!currentRequest) return;
 
   switch (e.key) {
