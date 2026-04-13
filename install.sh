@@ -1,0 +1,89 @@
+#!/bin/bash
+set -euo pipefail
+
+# Claude Keyboard - macOS 安装脚本
+# 用法: curl -fsSL https://raw.githubusercontent.com/DurioLab/claude-keyboard/main/install.sh | bash
+
+REPO="DurioLab/claude-keyboard"
+APP_NAME="Claude Keyboard"
+INSTALL_DIR="/Applications"
+
+# 颜色
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+NC='\033[0m'
+
+info()  { echo -e "${GREEN}[✓]${NC} $1"; }
+warn()  { echo -e "${YELLOW}[!]${NC} $1"; }
+error() { echo -e "${RED}[✗]${NC} $1"; exit 1; }
+
+# 仅支持 macOS
+[[ "$(uname)" == "Darwin" ]] || error "此脚本仅支持 macOS"
+
+# 检测架构
+ARCH="$(uname -m)"
+case "$ARCH" in
+  arm64)  DMG_PATTERN="aarch64.dmg" ;;
+  x86_64) DMG_PATTERN="x86_64.dmg"  ;;
+  *)      error "不支持的架构: $ARCH" ;;
+esac
+
+# 获取最新 release
+info "正在获取最新版本..."
+RELEASE_JSON=$(curl -fsSL "https://api.github.com/repos/${REPO}/releases/latest") \
+  || error "无法获取 release 信息，请检查网络连接"
+
+VERSION=$(echo "$RELEASE_JSON" | grep '"tag_name"' | head -1 | sed 's/.*"tag_name": *"\([^"]*\)".*/\1/')
+DMG_URL=$(echo "$RELEASE_JSON" | grep '"browser_download_url"' | grep "$DMG_PATTERN" | head -1 | sed 's/.*"browser_download_url": *"\([^"]*\)".*/\1/')
+
+[[ -n "$VERSION" ]]  || error "无法解析版本号"
+[[ -n "$DMG_URL" ]]  || error "未找到适用于 ${ARCH} 的 DMG 文件"
+
+info "版本: ${VERSION} (${ARCH})"
+
+# 如果已安装，先关闭
+if pgrep -x "claude-virtual-keyboard" > /dev/null 2>&1; then
+  warn "正在关闭运行中的 ${APP_NAME}..."
+  pkill -x "claude-virtual-keyboard" 2>/dev/null || true
+  sleep 1
+fi
+
+# 下载 DMG
+TMPDIR_PATH=$(mktemp -d)
+DMG_PATH="${TMPDIR_PATH}/${APP_NAME}.dmg"
+trap 'rm -rf "$TMPDIR_PATH"' EXIT
+
+info "正在下载 ${DMG_URL##*/}..."
+curl -fSL --progress-bar -o "$DMG_PATH" "$DMG_URL" \
+  || error "下载失败"
+
+# 挂载 DMG
+info "正在安装..."
+MOUNT_POINT=$(hdiutil attach "$DMG_PATH" -nobrowse -quiet | tail -1 | awk '{print $NF}')
+[[ -d "$MOUNT_POINT" ]] || error "DMG 挂载失败"
+
+# 拷贝到 /Applications
+APP_SRC=$(find "$MOUNT_POINT" -maxdepth 1 -name "*.app" | head -1)
+[[ -n "$APP_SRC" ]] || { hdiutil detach "$MOUNT_POINT" -quiet; error "DMG 中未找到 .app"; }
+
+rm -rf "${INSTALL_DIR}/${APP_NAME}.app"
+cp -R "$APP_SRC" "${INSTALL_DIR}/"
+
+# 卸载 DMG
+hdiutil detach "$MOUNT_POINT" -quiet 2>/dev/null || true
+
+# 移除 quarantine（关键步骤）
+xattr -cr "${INSTALL_DIR}/${APP_NAME}.app"
+
+info "安装完成! ${APP_NAME} ${VERSION}"
+echo ""
+echo "  启动: open \"${INSTALL_DIR}/${APP_NAME}.app\""
+echo ""
+
+# 询问是否立即启动
+read -r -p "是否立即启动? [Y/n] " answer < /dev/tty 2>/dev/null || answer="n"
+case "$answer" in
+  [nN]*) info "你可以稍后手动启动" ;;
+  *)     open "${INSTALL_DIR}/${APP_NAME}.app"; info "已启动 ${APP_NAME}" ;;
+esac
