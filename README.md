@@ -7,7 +7,7 @@
 [![GitHub stars](https://img.shields.io/github/stars/DurioLab/claude-keyboard?style=flat-square)](https://github.com/DurioLab/claude-keyboard/stargazers)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?style=flat-square)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows-lightgrey?style=flat-square)](#)
-[![Version](https://img.shields.io/badge/version-0.1.0-green?style=flat-square)](#)
+[![Version](https://img.shields.io/badge/version-0.1.7-green?style=flat-square)](#)
 
 Approve, reject, or whitelist Claude Code permissions — with a click, a keystroke, or your voice.
 

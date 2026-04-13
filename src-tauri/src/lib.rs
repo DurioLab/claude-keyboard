@@ -1,9 +1,9 @@
-pub mod ipc;
-pub mod tts;
-pub mod voice;
 mod hook_installer;
+pub mod ipc;
 mod permission;
 mod socket_server;
+pub mod tts;
+pub mod voice;
 
 use permission::PermissionManager;
 use socket_server::SocketServer;
@@ -12,22 +12,76 @@ use std::sync::Arc;
 use tauri::Manager;
 use voice::VoiceManager;
 
-const WINDOW_WIDTH: f64 = 600.0;
+const COMPACT_WIDTH: f64 = 220.0;
+const COMPACT_HEIGHT: f64 = 52.0;
+const EXPANDED_WIDTH: f64 = 520.0;
+const EXPANDED_HEIGHT: f64 = 188.0;
+
+fn position_window(window: &tauri::WebviewWindow, width: f64, height: f64) {
+    let monitor = window
+        .primary_monitor()
+        .ok()
+        .flatten()
+        .or_else(|| window.current_monitor().ok().flatten());
+    if let Some(monitor) = monitor {
+        let screen_size = monitor.size();
+        let scale = monitor.scale_factor();
+        let screen_w = screen_size.width as f64 / scale;
+
+        let x = (screen_w - width) / 2.0;
+        let y = if cfg!(target_os = "macos") { 38.0 } else { 8.0 };
+
+        log::info!(
+            "Screen: {}x{} (scale {}), positioning at ({}, {})",
+            screen_size.width,
+            screen_size.height,
+            scale,
+            x,
+            y
+        );
+
+        let _ = window.set_position(tauri::LogicalPosition::new(x, y));
+    }
+
+    let _ = window.set_size(tauri::LogicalSize::new(width, height));
+}
+
+pub(crate) fn reveal_main_window(app: &tauri::AppHandle) {
+    if let Some(window) = app.get_webview_window("main") {
+        position_window(&window, EXPANDED_WIDTH, EXPANDED_HEIGHT);
+
+        #[cfg(target_os = "macos")]
+        {
+            let _ = window.set_visible_on_all_workspaces(true);
+        }
+
+        let _ = window.unminimize();
+        let _ = window.show();
+        let _ = window.set_focus();
+    } else {
+        log::warn!("Main window not found while trying to reveal permission UI");
+    }
+}
 
 fn build_tray_menu(
     app: &tauri::AppHandle,
     is_voice: bool,
 ) -> tauri::Result<tauri::menu::Menu<tauri::Wry>> {
     use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
-    let sound_label = if !is_voice { "✓  音效提醒" } else { "    音效提醒" };
-    let voice_label = if is_voice { "✓  语音提醒" } else { "    语音提醒" };
-    let sound_item =
-        MenuItem::with_id(app, "notify-sound", sound_label, true, None::<&str>)?;
-    let voice_item =
-        MenuItem::with_id(app, "notify-voice", voice_label, true, None::<&str>)?;
+    let sound_label = if !is_voice {
+        "✓  音效提醒"
+    } else {
+        "    音效提醒"
+    };
+    let voice_label = if is_voice {
+        "✓  语音提醒"
+    } else {
+        "    语音提醒"
+    };
+    let sound_item = MenuItem::with_id(app, "notify-sound", sound_label, true, None::<&str>)?;
+    let voice_item = MenuItem::with_id(app, "notify-voice", voice_label, true, None::<&str>)?;
     let sep = PredefinedMenuItem::separator(app)?;
-    let quit =
-        MenuItem::with_id(app, "quit", "退出 Claude Keyboard", true, None::<&str>)?;
+    let quit = MenuItem::with_id(app, "quit", "退出 Claude Keyboard", true, None::<&str>)?;
     Menu::with_items(app, &[&sound_item, &voice_item, &sep, &quit])
 }
 
@@ -61,6 +115,11 @@ fn respond_permission(
     state.socket_server.respond(actual_decision, reason)
 }
 
+#[tauri::command]
+fn get_pending_permission(state: tauri::State<'_, AppState>) -> Option<socket_server::HookEvent> {
+    state.socket_server.pending_event()
+}
+
 pub struct AppState {
     pub socket_server: Arc<SocketServer>,
     pub permission_mgr: Arc<PermissionManager>,
@@ -87,30 +146,7 @@ pub fn run() {
 
             // Position window at top center of primary screen (window starts hidden)
             if let Some(window) = app.get_webview_window("main") {
-                let monitor = window
-                    .primary_monitor()
-                    .ok()
-                    .flatten()
-                    .or_else(|| window.current_monitor().ok().flatten());
-                if let Some(monitor) = monitor {
-                    let screen_size = monitor.size();
-                    let scale = monitor.scale_factor();
-                    let screen_w = screen_size.width as f64 / scale;
-
-                    let x = (screen_w - WINDOW_WIDTH) / 2.0;
-                    let y = if cfg!(target_os = "macos") { 38.0 } else { 8.0 };
-
-                    log::info!(
-                        "Screen: {}x{} (scale {}), positioning at ({}, {})",
-                        screen_size.width,
-                        screen_size.height,
-                        scale,
-                        x,
-                        y
-                    );
-
-                    let _ = window.set_position(tauri::LogicalPosition::new(x, y));
-                }
+                position_window(&window, COMPACT_WIDTH, COMPACT_HEIGHT);
             }
 
             // Windows vibrancy
@@ -176,8 +212,9 @@ pub fn run() {
                 .build(app)?;
 
             // Start socket server with notification mode
+            let reveal_handle = handle.clone();
             socket_server.start(
-                handle.clone(),
+                reveal_handle.clone(),
                 permission_mgr.clone(),
                 voice_mgr.clone(),
                 notify_mode.clone(),
@@ -194,7 +231,10 @@ pub fn run() {
 
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![respond_permission])
+        .invoke_handler(tauri::generate_handler![
+            respond_permission,
+            get_pending_permission
+        ])
         .on_window_event(|_window, event| {
             if let tauri::WindowEvent::Destroyed = event {
                 socket_server::cleanup();

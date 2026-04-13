@@ -27,13 +27,10 @@ pub fn install_hooks(app_handle: &tauri::AppHandle) {
 
     // Copy the hook binary from bundled resources
     let binary_dest = hooks_dir.join(HOOK_BINARY_NAME);
-    if let Ok(resource_path) = app_handle
-        .path()
-        .resolve(
-            &format!("resources/{}", HOOK_BINARY_NAME),
-            tauri::path::BaseDirectory::Resource,
-        )
-    {
+    if let Ok(resource_path) = app_handle.path().resolve(
+        &format!("resources/{}", HOOK_BINARY_NAME),
+        tauri::path::BaseDirectory::Resource,
+    ) {
         let _ = fs::copy(&resource_path, &binary_dest);
     } else {
         // Fallback for dev mode: look for compiled binary in target directory
@@ -124,9 +121,7 @@ pub fn uninstall() {
                     }
                 }
                 // Remove empty hook events
-                hooks.retain(|_, v| {
-                    v.as_array().map(|a| !a.is_empty()).unwrap_or(true)
-                });
+                hooks.retain(|_, v| v.as_array().map(|a| !a.is_empty()).unwrap_or(true));
             }
             if let Ok(output) = serde_json::to_string_pretty(&json) {
                 let _ = fs::write(&settings_path, output);
@@ -166,18 +161,9 @@ fn update_settings(settings_path: &PathBuf, hooks_dir: &PathBuf) {
             "PermissionRequest",
             serde_json::json!([{"matcher": "*", "hooks": hook_entry_with_timeout}]),
         ),
-        (
-            "Stop",
-            serde_json::json!([{"hooks": hook_entry}]),
-        ),
-        (
-            "SessionStart",
-            serde_json::json!([{"hooks": hook_entry}]),
-        ),
-        (
-            "SessionEnd",
-            serde_json::json!([{"hooks": hook_entry}]),
-        ),
+        ("Stop", serde_json::json!([{"hooks": hook_entry}])),
+        ("SessionStart", serde_json::json!([{"hooks": hook_entry}])),
+        ("SessionEnd", serde_json::json!([{"hooks": hook_entry}])),
     ];
 
     // Get or create hooks object

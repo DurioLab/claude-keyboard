@@ -4,8 +4,9 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use tauri::{AppHandle, Emitter};
 
-use crate::ipc::{IpcListener, IpcStream, cleanup as ipc_cleanup, IPC_PATH};
+use crate::ipc::{cleanup as ipc_cleanup, IpcListener, IpcStream, IPC_PATH};
 use crate::permission::PermissionManager;
+use crate::reveal_main_window;
 use crate::tts::{self, Tts};
 use crate::voice::VoiceManager;
 
@@ -128,6 +129,12 @@ impl SocketServer {
             Err("No pending permission request".to_string())
         }
     }
+
+    /// Return the current pending permission event, if any.
+    pub fn pending_event(&self) -> Option<HookEvent> {
+        let pending_guard = self.pending.lock().unwrap();
+        pending_guard.as_ref().map(|pending| pending.event.clone())
+    }
 }
 
 fn read_event(stream: &mut IpcStream) -> Option<Vec<u8>> {
@@ -244,9 +251,15 @@ fn handle_client(
             });
         }
 
-        // Emit event to frontend — JS will show/focus the window
+        // Reveal the window from Rust as well so hidden-agent-window activation
+        // does not depend on frontend listener timing.
+        reveal_main_window(&app);
+
         let _ = app.emit("permission-request", &event);
-        log::info!("Permission request emitted to UI for tool: {:?}", event.tool);
+        log::info!(
+            "Permission request emitted to UI for tool: {:?}",
+            event.tool
+        );
 
         // Notification based on current mode
         let is_voice = notify_mode.load(Ordering::Relaxed);

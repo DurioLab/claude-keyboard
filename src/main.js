@@ -243,16 +243,6 @@ keys.forEach((key, i) => {
   });
 });
 
-// Listen for permission events from Rust backend
-listen('permission-request', (event) => {
-  showPermission(event.payload);
-});
-
-// Listen for auto-approved notifications
-listen('permission-auto-approved', (event) => {
-  console.log('Auto-approved:', event.payload);
-});
-
 // ---- Voice Status ----
 const micStatus = document.getElementById('mic-status');
 const micText = micStatus?.querySelector('.mic-text');
@@ -264,7 +254,7 @@ const voiceStatusMap = {
   recognized: { class: 'mic-recognized', text: '' },
 };
 
-listen('voice-status', (event) => {
+function handleVoiceStatus(event) {
   const { status, text, command } = event.payload;
   const config = voiceStatusMap[status] || voiceStatusMap.idle;
 
@@ -284,10 +274,10 @@ listen('voice-status', (event) => {
       }
     }
   }
-});
+}
 
 // Listen for voice command (triggers confirmation)
-listen('voice-command', (event) => {
+function handleVoiceCommand(event) {
   if (!currentRequest) return;
   const { decision } = event.payload;
 
@@ -312,7 +302,31 @@ listen('voice-command', (event) => {
   setTimeout(() => {
     confirmSelection();
   }, 150);
-});
+}
 
-// Initialize: set compact size on load (window starts hidden)
-resizeWindow(COMPACT_SIZE);
+async function init() {
+  await Promise.all([
+    listen('permission-request', (event) => {
+      showPermission(event.payload);
+    }),
+    listen('permission-auto-approved', (event) => {
+      console.log('Auto-approved:', event.payload);
+    }),
+    listen('voice-status', handleVoiceStatus),
+    listen('voice-command', handleVoiceCommand),
+  ]);
+
+  try {
+    const pending = await invoke('get_pending_permission');
+    if (pending) {
+      await showPermission(pending);
+      return;
+    }
+  } catch (e) {
+    console.error('Failed to load pending permission:', e);
+  }
+
+  resizeWindow(COMPACT_SIZE);
+}
+
+init();

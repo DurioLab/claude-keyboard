@@ -67,20 +67,8 @@ fn ipc_send(payload: &[u8], wait_response: bool) -> Option<Vec<u8>> {
             flags: u32,
             template: isize,
         ) -> isize;
-        fn WriteFile(
-            h: isize,
-            buf: *const u8,
-            len: u32,
-            written: *mut u32,
-            ovl: *mut u8,
-        ) -> i32;
-        fn ReadFile(
-            h: isize,
-            buf: *mut u8,
-            len: u32,
-            read: *mut u32,
-            ovl: *mut u8,
-        ) -> i32;
+        fn WriteFile(h: isize, buf: *const u8, len: u32, written: *mut u32, ovl: *mut u8) -> i32;
+        fn ReadFile(h: isize, buf: *mut u8, len: u32, read: *mut u32, ovl: *mut u8) -> i32;
         fn CloseHandle(h: isize) -> i32;
         fn FlushFileBuffers(h: isize) -> i32;
     }
@@ -108,8 +96,15 @@ fn ipc_send(payload: &[u8], wait_response: bool) -> Option<Vec<u8>> {
 
     // Write payload
     let mut written: u32 = 0;
-    let ok =
-        unsafe { WriteFile(handle, payload.as_ptr(), payload.len() as u32, &mut written, ptr::null_mut()) };
+    let ok = unsafe {
+        WriteFile(
+            handle,
+            payload.as_ptr(),
+            payload.len() as u32,
+            &mut written,
+            ptr::null_mut(),
+        )
+    };
     if ok == 0 {
         unsafe { CloseHandle(handle) };
         return None;
@@ -119,7 +114,15 @@ fn ipc_send(payload: &[u8], wait_response: bool) -> Option<Vec<u8>> {
     if wait_response {
         let mut buf = [0u8; 4096];
         let mut nread: u32 = 0;
-        let ok = unsafe { ReadFile(handle, buf.as_mut_ptr(), buf.len() as u32, &mut nread, ptr::null_mut()) };
+        let ok = unsafe {
+            ReadFile(
+                handle,
+                buf.as_mut_ptr(),
+                buf.len() as u32,
+                &mut nread,
+                ptr::null_mut(),
+            )
+        };
         unsafe { CloseHandle(handle) };
         if ok != 0 && nread > 0 {
             Some(buf[..nread as usize].to_vec())

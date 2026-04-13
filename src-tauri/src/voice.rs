@@ -94,11 +94,8 @@ impl VoiceManager {
     /// `model_path` – path to the ggml whisper tiny model file.
     /// The whisper model is loaded eagerly; returns `Err` if loading fails.
     pub fn new(model_path: &str) -> Result<Self, String> {
-        let ctx = WhisperContext::new_with_params(
-            model_path,
-            WhisperContextParameters::default(),
-        )
-        .map_err(|e| format!("Failed to load whisper model at {}: {}", model_path, e))?;
+        let ctx = WhisperContext::new_with_params(model_path, WhisperContextParameters::default())
+            .map_err(|e| format!("Failed to load whisper model at {}: {}", model_path, e))?;
 
         Ok(Self {
             inner: Arc::new(VoiceInner {
@@ -117,11 +114,7 @@ impl VoiceManager {
     /// transcription. Recognised commands are delivered via `on_command`.
     ///
     /// `app_handle` is used to emit `voice-status` events to the frontend.
-    pub fn start_listening<F>(
-        &self,
-        app_handle: AppHandle,
-        on_command: F,
-    ) -> Result<(), String>
+    pub fn start_listening<F>(&self, app_handle: AppHandle, on_command: F) -> Result<(), String>
     where
         F: Fn(&str, &str) + Send + 'static,
     {
@@ -315,8 +308,8 @@ where
                     silence_count = 0;
                 }
 
-                let should_stop = silence_count >= silence_samples
-                    || recorded.len() >= max_record_samples;
+                let should_stop =
+                    silence_count >= silence_samples || recorded.len() >= max_record_samples;
 
                 if should_stop {
                     log::info!(
@@ -334,18 +327,10 @@ where
                         Ok(ref t) if !t.trim().is_empty() => {
                             let trimmed = t.trim();
                             log::info!("Whisper recognized: \"{}\"", trimmed);
-                            emit_status(
-                                &app,
-                                "recognized",
-                                Some(trimmed.to_string()),
-                            );
+                            emit_status(&app, "recognized", Some(trimmed.to_string()));
 
                             if let Some((decision, _kw)) = CommandParser::parse(trimmed) {
-                                log::info!(
-                                    "Command matched: {} (text: \"{}\")",
-                                    decision,
-                                    trimmed
-                                );
+                                log::info!("Command matched: {} (text: \"{}\")", decision, trimmed);
                                 on_command(decision, trimmed);
                             }
                         }
@@ -382,10 +367,7 @@ where
 // Whisper inference
 // ---------------------------------------------------------------------------
 
-fn run_whisper(
-    ctx: &Arc<Mutex<Option<WhisperContext>>>,
-    audio: &[f32],
-) -> Result<String, String> {
+fn run_whisper(ctx: &Arc<Mutex<Option<WhisperContext>>>, audio: &[f32]) -> Result<String, String> {
     let guard = ctx.lock().unwrap();
     let whisper = guard
         .as_ref()
