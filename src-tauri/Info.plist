@@ -4,5 +4,7 @@
 <dict>
     <key>NSMicrophoneUsageDescription</key>
     <string>Claude Keyboard needs microphone access for voice confirmation of permission requests.</string>
+    <key>LSUIElement</key>
+    <true/>
 </dict>
 </plist>

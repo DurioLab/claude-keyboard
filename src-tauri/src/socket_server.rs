@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 use std::io::{Read, Write};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use tauri::{AppHandle, Emitter};
 
@@ -60,6 +61,7 @@ impl SocketServer {
         app_handle: AppHandle,
         permission_mgr: Arc<PermissionManager>,
         voice_mgr: Option<Arc<VoiceManager>>,
+        notify_mode: Arc<AtomicBool>,
     ) {
         let pending = self.pending.clone();
 
@@ -84,8 +86,9 @@ impl SocketServer {
                         let perm = permission_mgr.clone();
                         let pending_clone = pending.clone();
                         let voice = voice_mgr.clone();
+                        let mode = notify_mode.clone();
                         std::thread::spawn(move || {
-                            handle_client(stream, app, perm, pending_clone, voice);
+                            handle_client(stream, app, perm, pending_clone, voice, mode);
                         });
                     }
                     Err(e) => {
@@ -165,12 +168,23 @@ fn read_event(stream: &mut IpcStream) -> Option<Vec<u8>> {
     }
 }
 
+/// Play a brief system notification sound (sound mode only, macOS)
+fn play_notification_sound() {
+    #[cfg(target_os = "macos")]
+    {
+        let _ = std::process::Command::new("afplay")
+            .arg("/System/Library/Sounds/Ping.aiff")
+            .spawn();
+    }
+}
+
 fn handle_client(
     mut stream: IpcStream,
     app: AppHandle,
     permission_mgr: Arc<PermissionManager>,
     pending: Arc<Mutex<Option<PendingPermission>>>,
     voice_mgr: Option<Arc<VoiceManager>>,
+    notify_mode: Arc<AtomicBool>,
 ) {
     let data = match read_event(&mut stream) {
         Some(d) => d,
@@ -230,46 +244,51 @@ fn handle_client(
             });
         }
 
-        // Emit event to frontend to show the keyboard UI
+        // Emit event to frontend — JS will show/focus the window
         let _ = app.emit("permission-request", &event);
         log::info!("Permission request emitted to UI for tool: {:?}", event.tool);
 
-        // --- Voice confirmation flow ---
-        // 1. TTS announces the tool name
-        // 2. After TTS finishes, start voice listening
-        if let Some(ref vm) = voice_mgr {
-            let prompt = tts::format_permission_prompt(&tool_name);
-            let vm_clone = vm.clone();
-            let app_clone = app.clone();
+        // Notification based on current mode
+        let is_voice = notify_mode.load(Ordering::Relaxed);
+        if is_voice {
+            // Voice mode: TTS announces tool name, then listens for voice command
+            if let Some(ref vm) = voice_mgr {
+                let prompt = tts::format_permission_prompt(&tool_name);
+                let vm_clone = vm.clone();
+                let app_clone = app.clone();
 
-            // Pause mic during TTS to avoid self-hearing
-            vm.pause();
+                // Pause mic during TTS to avoid self-hearing
+                vm.pause();
 
-            std::thread::spawn(move || {
-                // Speak synchronously (blocks until done)
-                Tts::speak_sync(&prompt);
+                std::thread::spawn(move || {
+                    // Speak synchronously (blocks until done)
+                    Tts::speak_sync(&prompt);
 
-                // Resume mic and start listening
-                vm_clone.resume();
+                    // Resume mic and start listening
+                    vm_clone.resume();
 
-                if let Err(e) = vm_clone.start_listening(app_clone.clone(), move |decision, text| {
-                    log::info!(
-                        "Voice command received: decision={}, text=\"{}\"",
-                        decision,
-                        text
-                    );
-                    // Emit voice-command event to frontend
-                    // Frontend will handle the UI animation and call respond_permission
-                    let _ = app_clone.emit(
-                        "voice-command",
-                        VoiceCommandPayload {
-                            decision: decision.to_string(),
-                        },
-                    );
-                }) {
-                    log::warn!("Failed to start voice listening: {}", e);
-                }
-            });
+                    if let Err(e) =
+                        vm_clone.start_listening(app_clone.clone(), move |decision, text| {
+                            log::info!(
+                                "Voice command received: decision={}, text=\"{}\"",
+                                decision,
+                                text
+                            );
+                            let _ = app_clone.emit(
+                                "voice-command",
+                                VoiceCommandPayload {
+                                    decision: decision.to_string(),
+                                },
+                            );
+                        })
+                    {
+                        log::warn!("Failed to start voice listening: {}", e);
+                    }
+                });
+            }
+        } else {
+            // Sound mode: play system notification chime, user responds via keyboard/mouse
+            play_notification_sound();
         }
 
         return;

@@ -5,6 +5,7 @@ const { getCurrentWindow } = window.__TAURI__.window;
 const island = document.getElementById('island');
 const keys = document.querySelectorAll('.key');
 const toolNameEl = document.getElementById('tool-name');
+const toolDescEl = document.getElementById('tool-desc');
 const appWindow = getCurrentWindow();
 
 let selectedIndex = 1; // Default: Allow Always (middle)
@@ -51,7 +52,7 @@ function playSound(action) {
 
 // Window sizes (logical pixels)
 const COMPACT_SIZE = { width: 220, height: 52 };
-const EXPANDED_SIZE = { width: 520, height: 150 };
+const EXPANDED_SIZE = { width: 520, height: 188 };
 
 // Update visual selection
 function updateSelection() {
@@ -60,15 +61,43 @@ function updateSelection() {
   });
 }
 
-// Resize window and re-center horizontally
+// Format tool_input into a brief human-readable description
+function formatToolInput(toolInput) {
+  if (!toolInput) return '';
+  try {
+    if (typeof toolInput.command === 'string') return toolInput.command;
+    if (typeof toolInput.file_path === 'string') return toolInput.file_path;
+    if (typeof toolInput.path === 'string') return toolInput.path;
+    if (typeof toolInput.new_path === 'string') return toolInput.new_path;
+    if (typeof toolInput.url === 'string') return toolInput.url;
+    if (typeof toolInput.content === 'string') {
+      const s = toolInput.content.trim();
+      return s.length > 80 ? s.substring(0, 80) + '…' : s;
+    }
+    // Fallback: first string value
+    const vals = Object.values(toolInput).filter(v => typeof v === 'string');
+    if (vals.length > 0) {
+      const s = vals[0].trim();
+      return s.length > 80 ? s.substring(0, 80) + '…' : s;
+    }
+    return '';
+  } catch (e) {
+    return '';
+  }
+}
+
+// Resize window and re-center horizontally on primary monitor
 async function resizeWindow(size) {
   try {
-    const monitor = await appWindow.currentMonitor();
+    // Prefer primary monitor for consistent top-center placement
+    const monitor = await appWindow.primaryMonitor() || await appWindow.currentMonitor();
     if (monitor) {
       const scale = monitor.scaleFactor;
       const screenW = monitor.size.width / scale;
-      const x = (screenW - size.width) / 2;
-      const isMac = navigator.platform.startsWith('Mac');
+      // Include monitor's own x-offset (for multi-monitor setups)
+      const monitorX = monitor.position ? monitor.position.x / scale : 0;
+      const x = monitorX + (screenW - size.width) / 2;
+      const isMac = navigator.platform.startsWith('Mac') || navigator.userAgent.includes('Mac');
       const y = isMac ? 38 : 8;
       await appWindow.setSize(new window.__TAURI__.window.LogicalSize(size.width, size.height));
       await appWindow.setPosition(new window.__TAURI__.window.LogicalPosition(x, y));
@@ -80,24 +109,37 @@ async function resizeWindow(size) {
   }
 }
 
-// Show permission UI — expand the island
+// Show permission UI — resize (hidden), then show + focus + expand
 async function showPermission(event) {
   currentRequest = event;
   const toolName = event.tool || 'Unknown Tool';
   toolNameEl.textContent = toolName;
 
+  // Populate tool description
+  if (toolDescEl) {
+    toolDescEl.textContent = formatToolInput(event.tool_input);
+  }
+
   selectedIndex = 1; // Reset to Allow Always
   updateSelection();
 
-  // Resize window first, then animate island
+  // Resize and position while still hidden, then reveal
   await resizeWindow(EXPANDED_SIZE);
+
+  try {
+    await appWindow.show();
+    await appWindow.setFocus();
+  } catch (e) {
+    console.error('Failed to show/focus window:', e);
+  }
+
   requestAnimationFrame(() => {
     island.classList.remove('compact');
     island.classList.add('expanded');
   });
 }
 
-// Hide permission UI — shrink back to pill
+// Hide permission UI — collapse island, then hide window
 async function hidePermission() {
   island.classList.remove('expanded');
   island.classList.add('compact');
@@ -110,9 +152,17 @@ async function hidePermission() {
     if (mt) mt.textContent = '';
   }
 
-  // Wait for CSS animation to finish, then shrink window
-  setTimeout(() => {
-    resizeWindow(COMPACT_SIZE);
+  // Clear tool description
+  if (toolDescEl) toolDescEl.textContent = '';
+
+  // Wait for CSS animation to finish, then shrink and hide window
+  setTimeout(async () => {
+    await resizeWindow(COMPACT_SIZE);
+    try {
+      await appWindow.hide();
+    } catch (e) {
+      console.error('Failed to hide window:', e);
+    }
   }, 350);
 }
 
@@ -176,7 +226,7 @@ document.addEventListener('keydown', (e) => {
       break;
     case 'Escape':
       e.preventDefault();
-      selectedIndex = 2; // Reject is now on the right (index 2)
+      selectedIndex = 2; // Reject is on the right (index 2)
       updateSelection();
       confirmSelection();
       break;
@@ -211,7 +261,7 @@ const voiceStatusMap = {
   idle: { class: 'mic-idle', text: '待机' },
   listening: { class: 'mic-listening', text: '监听中' },
   processing: { class: 'mic-processing', text: '识别中' },
-  recognized: { class: 'mic-recognized', text: '' }, // text will be set from event
+  recognized: { class: 'mic-recognized', text: '' },
 };
 
 listen('voice-status', (event) => {
@@ -219,12 +269,10 @@ listen('voice-status', (event) => {
   const config = voiceStatusMap[status] || voiceStatusMap.idle;
 
   if (micStatus) {
-    // Remove all mic-* classes
     micStatus.className = 'mic-status ' + config.class;
 
     if (micText) {
       if (status === 'recognized' && command) {
-        // Show recognized command briefly
         const commandLabels = {
           'allow': 'Once ✓',
           'allow-always': 'Always ✓',
@@ -243,7 +291,6 @@ listen('voice-command', (event) => {
   if (!currentRequest) return;
   const { decision } = event.payload;
 
-  // Map decision to action
   const actionMap = {
     'allow': 'allow-once',
     'allow-once': 'allow-once',
@@ -253,7 +300,6 @@ listen('voice-command', (event) => {
   const action = actionMap[decision];
   if (!action) return;
 
-  // Find the matching key and simulate selection + confirm
   const targetKey = document.querySelector(`.key[data-action="${action}"]`);
   if (!targetKey) return;
 
@@ -263,11 +309,10 @@ listen('voice-command', (event) => {
   selectedIndex = idx;
   updateSelection();
 
-  // Brief highlight delay before confirming
   setTimeout(() => {
     confirmSelection();
   }, 150);
 });
 
-// Initialize: set compact size on load
+// Initialize: set compact size on load (window starts hidden)
 resizeWindow(COMPACT_SIZE);

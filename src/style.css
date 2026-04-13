@@ -27,10 +27,9 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  border: 0.5px solid rgba(255, 255, 255, 0.08);
-  box-shadow:
-    0 4px 24px rgba(0, 0, 0, 0.4),
-    0 0 0 0.5px rgba(255, 255, 255, 0.06);
+  /* Removed border and outline shadow to fix black line artifact */
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.35);
+  transform: translateZ(0); /* Force GPU compositing layer */
   /* Smooth transitions for all state changes */
   transition:
     width 0.45s cubic-bezier(0.34, 1.56, 0.64, 1),
@@ -48,7 +47,7 @@ body {
 /* --- Expanded (permission) state --- */
 .island.expanded {
   width: 520px;
-  height: 130px;
+  height: 168px;
   border-radius: 28px;
   background: rgba(0, 0, 0, 0.95);
   -webkit-backdrop-filter: blur(30px);
@@ -106,7 +105,7 @@ body {
   flex-direction: column;
   align-items: center;
   width: 100%;
-  padding: 12px 20px 10px;
+  padding: 10px 20px 8px;
   opacity: 0;
   transform: scale(0.85);
   transition:
@@ -122,14 +121,46 @@ body {
 }
 
 /* ============================================
+   Confirmation title — prominent Claude branding
+   ============================================ */
+.confirm-title {
+  font-size: 11px;
+  font-weight: 700;
+  color: #f97316;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+  margin-bottom: 5px;
+  text-align: center;
+}
+
+/* ============================================
+   Tool description — brief parameter summary
+   ============================================ */
+.tool-desc {
+  font-size: 9px;
+  color: rgba(255, 255, 255, 0.3);
+  max-width: 460px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-bottom: 5px;
+  font-family: 'SF Mono', 'Monaco', 'Menlo', 'Courier New', monospace;
+  padding: 0 4px;
+}
+
+.tool-desc:empty {
+  display: none;
+}
+
+/* ============================================
    Tool info bar
    ============================================ */
 .tool-info {
   display: flex;
   align-items: center;
   gap: 6px;
-  margin-bottom: 10px;
-  padding: 3px 10px;
+  margin-bottom: 5px;
+  padding: 2px 10px;
   background: rgba(255, 255, 255, 0.07);
   border-radius: 8px;
   max-width: 100%;
@@ -239,7 +270,7 @@ body {
    Status bar
    ============================================ */
 .status-bar {
-  margin-top: 8px;
+  margin-top: 4px;
 }
 
 .hint {
